@@ -6,7 +6,7 @@ Assumptions include:     2D model, flat plate aerodynamics, point mass kite,
 """
 
 from ParticleS import ParticleS
-from AbstractForce import ForceG, ForceT, ForceL, ForceD
+from AbstractForce import ForceDamp, ForceG, ForceT, ForceL, ForceD, ForceDamp
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
@@ -28,13 +28,14 @@ class SimplifiedModel:
         # prepping attributes
         self.particles = {}
         self.forces = {}
-        self.cs = 30                    # spring coefficient [N/m]
+        self.cs = 300                    # spring coefficient [N/m]
+        self.cd = 1000                   # damper coefficient [N/m/s]
         self.resultant = np.array([0, 0])
         self.acc = np.array([0, 0])     # acceleration vector
 
         # simulation parameters
         self.t = 0
-        self.dt = 0.01
+        self.dt = 0.001
         self.T = 10
 
         self.update()
@@ -53,11 +54,15 @@ class SimplifiedModel:
             self.forces["tether"] = ForceT(self.particles["kite_p"], self.particles["gs_p"], self.mass, self.tether_l, self.cs)
             self.forces["lift"] = ForceL(self.particles["kite_p"], vw=self.vw, vk=self.vk, Akite=self.Akite)
             self.forces["drag"] = ForceD(self.particles["kite_p"], vw=self.vw, vk=self.vk, Akite=self.Akite)
-        # need a 'smarter' way of recalculating forces here
+            self.forces["damper"] = ForceDamp(self.particles["kite_p"], self.particles["gs_p"], vk=self.vk, cd=self.cd)
+
+        # need a 'smarter' way of recalculating/updating forces here, probably abstract method 
+        # (for force in self.forces.items(): force.update(v(id), pos(id)) )
         else:
             self.forces["tether"] = ForceT(self.particles["kite_p"], self.particles["gs_p"], self.mass, self.tether_l, self.cs)
             self.forces["lift"] = ForceL(self.particles["kite_p"], vw=self.vw, vk=self.vk, Akite=self.Akite)
             self.forces["drag"] = ForceD(self.particles["kite_p"], vw=self.vw, vk=self.vk, Akite=self.Akite)
+            self.forces["damper"] = ForceDamp(self.particles["kite_p"], self.particles["gs_p"], vk=self.vk, cd=self.cd)
 
     @staticmethod
     def particle(coord: npt.ArrayLike):
@@ -124,11 +129,10 @@ if __name__ == '__main__':
     model = SimplifiedModel()
     model.plot()
     # for name, force in model.forces.items():
-    #     print(name, f"{force.force():.1f} N", force.orientation())
-    # for i in range(10):
-    #     model.propagate()
-    #     # for name, force in model.forces.items():
-    #     #     print(name, f"{force.force():.1f} N", force.orientation())
-    #     print(model.kite_x, model.kite_y)
-    #     print(model.resultant)
-    #     print()
+    #     print(name, f"{force.magnitude():.1f} N", force.orientation())
+    for i in range(10):
+        model.propagate()
+        for name, force in model.forces.items():
+            print(name, f"{force.magnitude():.1f} N", force.orientation())
+        print(f"vk: {model.vk}, Fres: {model.resultant} N")
+        print()

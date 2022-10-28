@@ -9,7 +9,7 @@ import numpy.typing as npt
 
 class AbstractForce(ABC):
     def __init__(self, p1: ParticleS = None, p2: ParticleS = None, mass: float = 0, length: float = 0, cs: float = 0,
-                 vk: npt.ArrayLike = (0, 0), vw: npt.ArrayLike = (0, 0), rho: float = 1.225, Akite: float = 0):
+                 vk: npt.ArrayLike = (0, 0), vw: npt.ArrayLike = (0, 0), rho: float = 1.225, Akite: float = 0, cd:float = 0):
         self.p1 = p1
         self.p2 = p2
         self.mass = mass
@@ -20,6 +20,7 @@ class AbstractForce(ABC):
         self.rho = rho
         self.Akite = Akite
         self.vr = np.array([vw[0]-vk[0], vw[1]-vk[1]])
+        self.cd = cd
 
     @abstractmethod
     def magnitude(self):
@@ -73,32 +74,28 @@ class ForceT(AbstractForce):  # Tether spring force
             return 1, 1
 
 
-# class ForceD(AbstractForce):  # Tether damper force
-#     def __str__(self):
-#         return f"Spring force of {self.magnitude():.1f}N with orientation {self.orientation()[0]:.3f}x, {self.orientation()[1]:.3f}y"
-#
-#     def magnitude(self):
-#         coord1 = self.p1.coord
-#         coord2 = self.p2.coord
-#         if dist(coord1, coord2) >= self.length:
-#             l = dist(coord1, coord2)
-#             dl = l-self.length
-#             f = dl*self.Cs
-#             return f
-#         else:
-#             return 0
-#
-#     def orientation(self):
-#         coord1 = self.p1.coord
-#         coord2 = self.p2.coord
-#         if dist(coord1, coord2) >= self.length:
-#             l = dist(coord1, coord2)
-#             dx = coord2[0]-coord1[0]
-#             dy = coord2[1]-coord1[1]
-#             orientation = (dx/l, dy/l)      # orientation for force acting on particle 1
-#             return np.array(orientation)
-#         else:
-#             return 1, 1
+# linear damping force, based on v_kite at time t0 (actual timestep)
+class ForceDamp(AbstractForce):  # Tether damper force
+    def __str__(self):
+        return f"Damper force of {self.magnitude():.1f}N with orientation {self.orientation()[0]:.3f}x, {self.orientation()[1]:.3f}y"
+
+    def magnitude(self):
+        u_l = self.orientation()
+        vdl = u_l*np.dot(self.vk, u_l)/sqrt(np.dot(u_l, u_l))**2
+        if np.dot(vdl, u_l) > 0:
+            Fdamp = sqrt(vdl[0]**2+vdl[1]**2)*self.cd
+            return Fdamp
+        else:
+            return 0
+
+    def orientation(self):
+        coord1 = self.p1.coord
+        coord2 = self.p2.coord
+        l = dist(coord1, coord2)
+        dx = coord2[0]-coord1[0]
+        dy = coord2[1]-coord1[1]
+        orientation = (dx/l, dy/l)      # orientation for force acting on particle 1
+        return np.array(orientation)
 
 # should probably be one aerodynamic force class with drag
 class ForceL(AbstractForce):  # Lift force, flat plate aerodynamic model
@@ -115,7 +112,7 @@ class ForceL(AbstractForce):  # Lift force, flat plate aerodynamic model
 
     def aoa(self):  # angle of attack, hardcoded fixed angle for now
         # aoa = atan(self.vk[1]/-self.vk[0])
-        aoa = 10
+        aoa = 1
         return aoa
 
     def orientation(self):
@@ -145,7 +142,7 @@ class ForceD(AbstractForce):  # Drag force, flat plate aerodynamic model
 
     def aoa(self):  # angle of attack, hardcoded fixed angle for now
         # aoa = atan(self.vk[1]/-self.vk[0])
-        aoa = 10
+        aoa = 1
         return aoa
 
     def orientation(self):
