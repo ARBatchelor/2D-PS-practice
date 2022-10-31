@@ -2,6 +2,7 @@
 import numpy as np
 import numpy.typing as npt
 
+
 class ParticleS:
     def __init__(self, pos: npt.ArrayLike):
         self.pos = np.array(pos)

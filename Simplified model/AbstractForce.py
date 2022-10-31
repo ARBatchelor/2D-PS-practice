@@ -9,7 +9,8 @@ import numpy.typing as npt
 
 class AbstractForce(ABC):
     def __init__(self, p1: ParticleS = None, p2: ParticleS = None, mass: float = 0, length: float = 0, cs: float = 0,
-                 vk: npt.ArrayLike = (0, 0), vw: npt.ArrayLike = (0, 0), rho: float = 1.225, Akite: float = 0, cd:float = 0):
+                 vk: npt.ArrayLike = (0, 0), vw: npt.ArrayLike = (0, 0), rho: float = 1.225, Akite: float = 0,
+                 cd: float = 0, cda: float = 0):
         self.p1 = p1
         self.p2 = p2
         self.mass = mass
@@ -19,8 +20,10 @@ class AbstractForce(ABC):
         self.vw = np.array(vw)
         self.rho = rho
         self.Akite = Akite
-        self.vr = np.array([vw[0]-vk[0], vw[1]-vk[1]])
+        # self.va = np.array([vw[0]-vk[0], vw[1]-vk[1]])
+        self.va = np.array([vw[0], vw[1]])
         self.cd = cd
+        self.cda = cda
 
     @abstractmethod
     def magnitude(self):
@@ -74,15 +77,16 @@ class ForceT(AbstractForce):  # Tether spring force
             return 1, 1
 
 
-# linear damping force, based on v_kite at time t0 (actual timestep)
-class ForceDamp(AbstractForce):  # Tether damper force
+# linear damping force, based on v_kite at time t0 (actual timestep)!
+class ForceDampT(AbstractForce):  # Tether damper force
     def __str__(self):
-        return f"Damper force of {self.magnitude():.1f}N with orientation {self.orientation()[0]:.3f}x, {self.orientation()[1]:.3f}y"
+        return f"Linear tether damping force of {self.magnitude():.1f}N " \
+               f"with orientation {self.orientation()[0]:.3f}x, {self.orientation()[1]:.3f}y"
 
     def magnitude(self):
         u_l = self.orientation()
         vdl = u_l*np.dot(self.vk, u_l)/sqrt(np.dot(u_l, u_l))**2
-        if np.dot(vdl, u_l) > 0:
+        if -1*np.dot(vdl, u_l) > 0:
             Fdamp = sqrt(vdl[0]**2+vdl[1]**2)*self.cd
             return Fdamp
         else:
@@ -97,6 +101,21 @@ class ForceDamp(AbstractForce):  # Tether damper force
         orientation = (dx/l, dy/l)      # orientation for force acting on particle 1
         return np.array(orientation)
 
+
+# linear viscous damping force, based on v_kite at time t0 (actual timestep)!
+class ForceDampA(AbstractForce):  # Aerodynamic damping force
+    def __str__(self):
+        return f"Linear aerodynamic damping force of {self.magnitude():.1f}N " \
+               f"with orientation {self.orientation()[0]:.3f}x, {self.orientation()[1]:.3f}y"
+
+    def magnitude(self):
+        f_damp_a = sqrt(self.vk[0]**2 + self.vk[1]**2)*self.cda
+        return f_damp_a
+
+    def orientation(self):
+        return np.array([-1*self.vk[0]/sqrt(self.vk[0]**2 + self.vk[1]**2), -1*self.vk[1]/sqrt(self.vk[0]**2 + self.vk[1]**2)])
+
+
 # should probably be one aerodynamic force class with drag
 class ForceL(AbstractForce):  # Lift force, flat plate aerodynamic model
     def __str__(self):
@@ -106,18 +125,19 @@ class ForceL(AbstractForce):  # Lift force, flat plate aerodynamic model
     def magnitude(self):
         a = self.aoa()
         Cl = 6e-5*a**4 - 27e-4*a**3 + 0.0299*a**2 + 0.0804*a + 0.4066
-        vr = sqrt(self.vr[0]**2+self.vr[1]**2)
-        L = 0.5*self.rho*vr**2*Cl*self.Akite
+        # print(Cl)
+        va = sqrt(self.va[0]**2+self.va[1]**2)
+        L = 0.5*self.rho*va**2*Cl*self.Akite
         return L
 
     def aoa(self):  # angle of attack, hardcoded fixed angle for now
         # aoa = atan(self.vk[1]/-self.vk[0])
-        aoa = 1
+        aoa = 10
         return aoa
 
     def orientation(self):
-        x = self.vr[0]
-        y = self.vr[1]
+        x = self.va[0]
+        y = self.va[1]
         l = sqrt(x**2 + y**2)
         return -y/l, x/l
 
@@ -130,23 +150,25 @@ class ForceD(AbstractForce):  # Drag force, flat plate aerodynamic model
     def magnitude(self):
         a = self.aoa()
         if -4 <= a <= 12:
-            Cd = -10e-7*a**6 + 6e-6*a**5 - 10e-4*a**4 + 7e-4*a**3 - 1.1e-3*a**2 - 1.08e-2*a +0.1044
+            Cd = -1e-7*a**6 + 6e-6*a**5 - 1e-4*a**4 + 7e-4*a**3 - 1.1e-3*a**2 - 1.08e-2*a + 0.1044
             # check equation, 2nd to last term
         elif 12 < a <= 17:
             Cd = 0.0246*a - 0.1489
         else:
             Cd = 0.27
-        vr = sqrt(self.vr[0]**2+self.vr[1]**2)
-        D = 0.5*self.rho*vr**2*Cd*self.Akite
+        # print(Cd)
+        Cd = Cd/2
+        va = sqrt(self.va[0]**2+self.va[1]**2)
+        D = 0.5*self.rho*va**2*Cd*self.Akite
         return D
 
     def aoa(self):  # angle of attack, hardcoded fixed angle for now
         # aoa = atan(self.vk[1]/-self.vk[0])
-        aoa = 1
+        aoa = 10
         return aoa
 
     def orientation(self):
-        x = self.vr[0]
-        y = self.vr[1]
+        x = self.va[0]
+        y = self.va[1]
         l = sqrt(x**2 + y**2)
         return x/l, y/l
